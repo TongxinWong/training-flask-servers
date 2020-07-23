@@ -1,13 +1,14 @@
 # -*-coding: utf-8 -*-
 """
-author: Tongxin Wong
+author: Tongxin Wong, Jie Liu
 create time: 2020-07-19
-update time: 2020-07-19
+update time: 2020-07-23
 """
 
 from flask import Flask, request, jsonify
 import web
 import TextRank
+import opinion_perception
 
 app = Flask(__name__)
 
@@ -37,6 +38,15 @@ def search_news():
     data = TextRank.Get_sample_news(query_line, dictionary, tfidf_vectors)
     return jsonify(data)
 
+@app.route('/api/hot_topic', methods=['GET'])
+def hot_topic():
+    data = opinion_perception.get_hot_topic()
+    return jsonify(data)
+
+@app.route('/api/sentiment_classify', methods=['GET'])
+def sentiment_classify():
+    data = opinion_perception.news_sentiment_classify(opinion_perception.get_top_comments_news())
+    return jsonify(data)
 
 if __name__ == '__main__':
     app.run()
