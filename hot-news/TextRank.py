@@ -11,17 +11,14 @@ import jieba.posseg as pseg
 import os
 from gensim import corpora, models, similarities
 from gensim.models import TfidfModel, doc2vec
-# 用于去除只出现一次的词
-from collections import defaultdict
 import re
 import pandas as pd
 import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
+from jieba import analyse
 
-# 用于去除只是用一次的词，目前暂时没用到
-# frequency = defaultdict(int)
-
+textrank = analyse.tfidf
 
 # 创建停用词list
 def stopwordslist(filepath):
@@ -35,26 +32,28 @@ stopwords = stopwordslist('./Model/baidu_stopwords.txt')
 stop_flag = ['x', 'c', 'u', 'd', 'p', 't', 'uj', 'm', 'f', 'r']  # 停用词性
 # stop_flag = []
 
-path = "./news_list"  # 文件夹目录
-filesnames = os.listdir(path) #得到文件夹下的所有文件名称
+# 根据url列表获取新闻正文内容
+def get_news_content(news_url):
+    print(news_url)
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'
+    }
 
-# 依据文件名得到标题
-def getFileName(filename):
-    re.sub(r'.txt', '',  filename)
-    return filename
+    response = requests.get(news_url, headers=headers)
+    response.encoding = 'GBK'
+    soup = BeautifulSoup(response.text, "html.parser")
 
-# 获取目录下所有文件路径
-def getFilePath(path, filenames):
-    change_filenames = []
-    for filename in filenames:
-        filename = path + "/" + filename
-        change_filenames.append(filename)
+    # 解析新闻正文
+    main_contents = soup.find('div', 'box_con')
 
-    print(change_filenames)
-    return change_filenames
-
-filePaths = getFilePath(path, filesnames)
-print(filePaths)
+    try:
+        contents = " "
+        for para in main_contents.find_all('p'):
+            contents += para.text
+    except AttributeError:
+        return ' '
+    else:
+        return contents
 
 # 对字段进行分词，用于检索
 def tokenzation_str(query_line):
@@ -67,33 +66,18 @@ def tokenzation_str(query_line):
     print(result)
     return result
 
-# 对一篇新闻分词，去停用词, 用于模型制作
-def tokenization(filename):
+# 对获取的新闻内容分词，去停用词, 用于模型制作
+def tokenization(content):
     result = []
-    print(filename)
-    with open(filename, 'r', encoding='utf8') as f:
-        text = f.read()
-        words = pseg.cut(text)
-    print(text)
-    print(words)
+    words = pseg.cut(content)
     # 去除停用词
     for word, flag in words:
         if flag not in stop_flag and word not in stopwords:
             result.append(word)
     print(result)
-    # 去除只出现一次的词,暂时还未用上
 
     return result
 
-# 根据文件名获取url
-def get_url(filename):
-    with open(filename, 'r', encoding='utf8') as f:
-
-        lines = f.readlines()
-        for line in lines:
-            if "<url>" in line:
-                url = re.findall(r".*<url>(.*)</url>", line)[0]
-                return url
 
 # 根据url获取dateTime和title
 def get_info(news_url):
@@ -122,35 +106,25 @@ def get_info(news_url):
     return title, datetime
 
 # 获取对应的url列表csv文件
-def get_url_list(filePaths):
-    news_url_list = []
+def get_url_list():
+    # 加载url列表
+    url_list = []
+    with open('./Model/news_url.csv', 'r') as csvfile:
+        reader = csv.reader(csvfile)
+        for url in reader:
+            url = url[0]
+            if url != 'url':
+                url_list.append(url)
+    return url_list
 
-    for filePath in filePaths:
-        print("尝试打开文本")
-        with open(filePath, 'r', encoding='utf8') as f:
-            print("打开文本成功")
-            lines = f.readlines()
-            for line in lines:
-                if "<url>" in line:
-                    url = re.findall(r".*<url>(.*)</url>", line)[0]
-                    print(url)
-                    news_url_list.append(url)
-                    break
-    print(len(news_url_list))
-    print(news_url_list)
-    dataframe = pd.DataFrame({'url': news_url_list})
-
-    # 将DataFrame存储为csv,index表示是否显示行名，default=True
-    # dataframe.to_csv("news_url.csv", index=False, sep=',')
-    dataframe.to_csv("news_list_url_test.csv", index=False, sep=',')
-    print("保存结束")
 
 # 获取模型
-def GetModel():
+def GetModel(url_list):
     # 读取文章，作为corpus语料库
     corpus = []
-    for each in filePaths:
-        corpus.append(tokenization(each))
+    for url in url_list:
+        content = get_news_content(url)
+        corpus.append(tokenization(content))
     print(len(corpus))
     print(corpus)
 
@@ -177,11 +151,12 @@ def GetModel():
     dictionary.save("./Model/dictionary.dic")
 
 # 获取对应的新闻信息
-def Get_sample_news(query_line, dictionary, tfidf_vectors):
-    url_list = []
+def Get_sample_news(query_line, url_list, dictionary, tfidf_vectors):
     # 利用刚刚的词袋模型字典，将查询字符串映射到字典的向量空间，以进行下一步的相似度计算。
     query = tokenzation_str(query_line)
+    print(query)
     query_bow = dictionary.doc2bow(query)
+    print(query_bow)
     print(len(query_bow))
     print(query_bow)
 
@@ -197,13 +172,11 @@ def Get_sample_news(query_line, dictionary, tfidf_vectors):
     print("前10条最大匹配概率及索引为：")
     items = []
     for i in range(0, 10):
-        index = scores[i][0]
-        url = get_url(filePaths[index])     # 得到对应url
+        index = scores[i][0]    # 获得索引
+        url = url_list[index]     # 得到对应url
         title, dateTime = get_info(url)     # 根据url得到新闻对应时间和标题
-        # title = filesnames[index].split('.')[0]  # 获取不加后缀的文件名
 
         print(scores[i][1], index, "title:  ", title, "url:", url)  # 输出分值
-        url_list.append(url)
         item = {
             'url': url,
             'title': title,
@@ -217,6 +190,7 @@ def Get_sample_news(query_line, dictionary, tfidf_vectors):
     print(data)
     return data
 
+
 # 初始资源加载函数
 def load_source():
     print("加载资源中....")
@@ -226,19 +200,10 @@ def load_source():
     tfidf_vectors = TfidfModel.load("./Model/tfidf_vectors.model")
     # 加载语料库
     # corpus = corpora.MmCorpus('/corpus.mm')
-    # 加载url列表
-    url_list = []
-    # url_lists = csv.reader(open("news_list_url_test.csv", encoding='utf-8'))
-    # print(url_lists)
-    # for url in url_lists:
-    #     url_list.append(url)
     print("加载完成")
     return dictionary, tfidf_vectors
 
-# 获取模型
-# GetModel()
 
-# query_line = "高考考试成绩"
-# dictionary, tfidf_vectors = load_source()
-# # 根据模型测试
-# Get_sample_news(query_line, dictionary, tfidf_vectors)
+# 获取模型
+# GetModel(url_list)
+
