@@ -15,6 +15,8 @@ app = Flask(__name__)
 # 加载字典
 # 加载模型
 dictionary, tfidf_vectors = TextRank.load_source()
+# 加载url列表
+url_list = TextRank.get_url_list()
 
 @app.route('/api/hot_news', methods=['POST'])
 def hot_news():
@@ -35,7 +37,7 @@ def search_news():
     # 获取查询字段
     query_line = request.args.get("query")
     # 返回url
-    data = TextRank.Get_sample_news(query_line, dictionary, tfidf_vectors)
+    data = TextRank.Get_sample_news(query_line, url_list, dictionary, tfidf_vectors)
     return jsonify(data)
 
 @app.route('/api/update_hot_topic', methods=['POST'])

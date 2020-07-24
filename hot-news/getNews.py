@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # _*_coding:utf-8 _*_
-#@Time    :2020/7/21 1:01
+#@Time    :2020/7/20 14:01
 #@Author  :LJ 
 #@FileName: TextRank.py
 
@@ -76,105 +76,23 @@ def get_hot_news(tag_values):
     data = {
         'items': selected_news_list[0:300]
     }
-    print(data)
+
     # 获取收集到的url
     url_list = []
-    print(data["items"])
+
     i = 1
     for item in data["items"]:
         # 读取200 条数据
         if (i%250!=0):
             if item["url"] not in url_list:
-                print(item)
                 url_list.append(item["url"])
                 i += 1
         else:
             break
-    print(url_list)
-    print(len(url_list))
     # return data
     return url_list
 
-# 获取新闻主要内容
-def get_news_content(news_url):
-    parsed_res = urlparse(news_url)
-    # 解析出host url，用于图片绝对地址的生成
-    host_url = parsed_res.netloc
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'
-    }
-    response = requests.get(news_url, headers=headers)
-    response.encoding = 'GBK'
-    soup = BeautifulSoup(response.text, "html.parser")
-    news_info = {}
-    # 添加新闻title
-    news_info['title'] = soup.title.text
-
-    text_title = soup.find('div', 'clearfix w1000_320 text_title')
-    source = text_title.find('div', 'fl')
-    # 添加新闻时间
-    news_info['date'] = source.text[0:16]
-    media_source = source.find('a')
-    # 添加新闻来源
-    news_info['media_source'] = media_source.text
-    # 解析新闻正文
-    main_contents = soup.find('div', 'box_con')
-    contents = []
-    for para in main_contents.find_all('p'):
-        if para.string == None:
-            # 处理图片或非p标签文字（图片标题或其他）
-            if para.find('img') == None:
-                # 处理非p标签文字
-                para_content = {
-                    'type': 'text',
-                    'is_center': False,
-                    'is_strong': False,
-                    'text': para.text
-                }
-                # 判断是否居中
-                if 'align' in para.attrs.keys():
-                    if para.attrs['align'] == 'center':
-                        para_content['is_center'] = True
-                # 判断是否加粗
-                if para.find('strong') != None:
-                    para_content['is_strong'] = True
-                contents.append(para_content)
-            else:
-                # 处理图片，提取url
-                para_content = {
-                    'type': 'img'
-                }
-                img_url = para.find('img').attrs['src']
-                # 将图片的相对url转为绝对url
-                if img_url.find(host_url) < 0:
-                    img_url = 'http://' + host_url + img_url
-                para_content['img_url'] = img_url
-                contents.append(para_content)
-        else:
-            # 一般性的段落文字
-            para_content = {
-                'type': 'text',
-                'is_center': False,
-                'is_strong': False,
-                'text': para.string
-            }
-            # 判断是否居中
-            if 'align' in para.attrs.keys():
-                if para.attrs['align'] == 'center':
-                    para_content['is_center'] = True
-            contents.append(para_content)
-    news_info['contents'] = contents
-    return news_info
-
 def get_news_url(news_url):
-    print(news_url)
-
-    parsed_res = urlparse(news_url)
-
-    # 解析出host url，用于图片绝对地址的生成
-    host_url = parsed_res.netloc
-    print(host_url)
-
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'
     }
@@ -189,67 +107,50 @@ def get_news_url(news_url):
     if main_contents!=None and main_contents.find_all('p')!=None:
         # 让获取的url都能在后面得到解析
         try:
-            print("try")
             # 检查是否能正确通过这种方式获取标题
             filename = soup.find('h1').text
-            print(filename)
 
             contents = " "
             for para in main_contents.find_all('p'):
                 contents += para.text
-
+        # 无法有效解析信息
         except AttributeError:
-            print("文件读取格式出错!")
             return ' '
+        # 出现超时错误
         except requests.exceptions.ReadTimeout:
-            print("出现超时异常!")
             return ' '
         else:
             return news_url
-    else:
-        print("格式不符合要求!")
+
 # 爬取数据
 def get_news():
-    url_list = []   # 用于获取所有url
-    # 加载已有可用url列表
-    url_arr = []
-    with open('./Model/news_url.csv.csv', 'r') as csvfile:
+    url_list = []   # 用于获取所有url, 原始url
+    url_arr = []       # 加载已有可用url列表
+    with open('./Model/news_url_list.csv.csv', 'r') as csvfile:
         reader = csv.reader(csvfile)
         for url in reader:
             url = url[0]
             if url != 'url' and 'http://' not in url:
                 url_arr.append(url)
-
-    length = len(url_arr)
-    print(url_arr)
-    print(length)
-
-    print("爬取中...")
+    # 开始爬取...
     for i in range(0, len(tag_values)):
         tag_value = [tag_values[i]]
         url_list.extend(get_hot_news(tag_value))
-
-    print(len(url_list))
-
+    # 用于控制读取速率
     i = 0
     for news_url in url_list:
         i += 1
         if (i % 100) == 0:
-            print("此时读取了", i, "次数据")
             # 延迟10s读取数据
-            print("从方法中获取的url长度：", len(url_arr)-length)
             time.sleep(5)
         else:
             url = get_news_url(news_url)
             # 筛选出可解析的url
             if url != ' ' and url not in url_arr:
                 url_arr.append(url)
-    print("从方法中获取的url长度：", len(url_arr)-length)
-    print(url_arr)
-
-    print("一共读取数据：", i)
+    # 保存url信息
     save_url(url_arr)
-    print("保存数据成功")
+
 
 # 以下步骤用来保存url信息
 def save_url(url_arr):
@@ -257,7 +158,8 @@ def save_url(url_arr):
     dataframe = pd.DataFrame({'url': url_arr})
 
     # 将DataFrame存储为csv,index表示是否显示行名，default=True
-    dataframe.to_csv("./Model/news_url.csv", index=False, sep=',')
+    dataframe.to_csv("./Model/news_url_list.csv", index=False, sep=',')
 
 # 爬取数据
 # get_news()
+

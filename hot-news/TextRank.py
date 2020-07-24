@@ -16,9 +16,8 @@ import pandas as pd
 import requests
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
-from jieba import analyse
+import numpy as np
 
-textrank = analyse.tfidf
 
 # 创建停用词list
 def stopwordslist(filepath):
@@ -29,12 +28,12 @@ def stopwordslist(filepath):
 stopwords = stopwordslist('./Model/baidu_stopwords.txt')
 
 # 设置jieba停用词性
-stop_flag = ['x', 'c', 'u', 'd', 'p', 't', 'uj', 'm', 'f', 'r']  # 停用词性
-# stop_flag = []
+stop_flag = ['x', 'c', 'u', 'd', 'p', 't', 'uj', 'm', 'f', 'r']
+
 
 # 根据url列表获取新闻正文内容
 def get_news_content(news_url):
-    print(news_url)
+    # 设置头信息
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'
     }
@@ -63,29 +62,24 @@ def tokenzation_str(query_line):
     for query in querys:
         if query not in stopwords:
             result.append(query)
-    print(result)
+
     return result
 
 # 对获取的新闻内容分词，去停用词, 用于模型制作
 def tokenization(content):
     result = []
+    # 获取迭代分词
     words = pseg.cut(content)
     # 去除停用词
     for word, flag in words:
         if flag not in stop_flag and word not in stopwords:
             result.append(word)
-    print(result)
 
     return result
 
 
 # 根据url获取dateTime和title
 def get_info(news_url):
-    parsed_res = urlparse(news_url)
-
-    # 解析出host url
-    host_url = parsed_res.netloc
-
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'
     }
@@ -93,6 +87,7 @@ def get_info(news_url):
     response.encoding = 'GBK'
     soup = BeautifulSoup(response.text, "html.parser")
 
+    # 获取标题栏信息
     text_title = soup.find('div', 'clearfix w1000_320 text_title')
     source = text_title.find('div', 'fl')
 
@@ -102,7 +97,6 @@ def get_info(news_url):
     # print(soup.find('div', 'f1').text)  会报错
     # 获取新闻时间
     datetime = source.text[0:16]
-    # datetime = soup.find('div', 'f1').text.split("来源")[0]
     return title, datetime
 
 # 获取对应的url列表csv文件
@@ -125,23 +119,15 @@ def GetModel(url_list):
     for url in url_list:
         content = get_news_content(url)
         corpus.append(tokenization(content))
-    print(len(corpus))
-    print(corpus)
 
     # 建立词袋模型
     dictionary = corpora.Dictionary(corpus)
-    print(dictionary)
 
     doc_vectors = [dictionary.doc2bow(text) for text in corpus]
-
-    print(len(doc_vectors))
-    print(doc_vectors)
 
     # 建立TF-IDF模型
     tfidf = models.TfidfModel(doc_vectors)
     tfidf_vectors = tfidf[doc_vectors]
-    print(len(tfidf_vectors))
-    print(len(tfidf_vectors[0]))
 
     # 存储语料库
     # corpora.MmCorpus.serialize('/corpus.mm', corpus)
@@ -154,29 +140,24 @@ def GetModel(url_list):
 def Get_sample_news(query_line, url_list, dictionary, tfidf_vectors):
     # 利用刚刚的词袋模型字典，将查询字符串映射到字典的向量空间，以进行下一步的相似度计算。
     query = tokenzation_str(query_line)
-    print(query)
     query_bow = dictionary.doc2bow(query)
-    print(query_bow)
-    print(len(query_bow))
-    print(query_bow)
 
     # 构建相似度矩阵，并进行新文本向量query_bow与该矩阵的相似度计算。
     index = similarities.MatrixSimilarity(tfidf_vectors)
     sims = index[query_bow]
-    print(len(list(enumerate(sims))))
-    print(list(enumerate(sims)))
+    # print(len(list(enumerate(sims))))
+    # print(list(enumerate(sims)))
 
     # 排序输出
     scores = sorted(enumerate(sims), key=lambda item: -item[1])  # 排序
-    print(scores)
-    print("前10条最大匹配概率及索引为：")
+    # 该条用于查看返回值 print(scores)
+
     items = []
     for i in range(0, 10):
         index = scores[i][0]    # 获得索引
         url = url_list[index]     # 得到对应url
         title, dateTime = get_info(url)     # 根据url得到新闻对应时间和标题
 
-        print(scores[i][1], index, "title:  ", title, "url:", url)  # 输出分值
         item = {
             'url': url,
             'title': title,
@@ -187,23 +168,21 @@ def Get_sample_news(query_line, url_list, dictionary, tfidf_vectors):
     data = {
         'items': items
     }
-    print(data)
-    return data
 
+    return data
 
 # 初始资源加载函数
 def load_source():
-    print("加载资源中....")
     # 加载字典
     dictionary = corpora.Dictionary.load("./Model/dictionary.dic")
     # 加载模型
     tfidf_vectors = TfidfModel.load("./Model/tfidf_vectors.model")
     # 加载语料库
     # corpus = corpora.MmCorpus('/corpus.mm')
-    print("加载完成")
     return dictionary, tfidf_vectors
 
 
 # 获取模型
 # GetModel(url_list)
+
 
