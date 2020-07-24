@@ -12,8 +12,8 @@ import pymysql
 import paddlehub as hub
 
 # 返回热点话题使用新浪（comment5评论页面的新闻列表数据channel=sh）的数据
-# 新闻评论情感分析使用新浪评论数前20的社会新闻，获取新闻id后再请求评论数据进行分析
-# 根据分析速度决定是否使用数据库保存已分析好的新闻数据
+# 新闻评论情感分析使用新浪社会新闻，获取新闻id后再请求评论数据进行分析
+# 新闻评论情感分析处理速度较慢，使用数据库保存已分析好的新闻数据
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.89 Safari/537.36'
