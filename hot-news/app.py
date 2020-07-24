@@ -2,7 +2,7 @@
 """
 author: Tongxin Wong, Jie Liu
 create time: 2020-07-19
-update time: 2020-07-23
+update time: 2020-07-24
 """
 
 from flask import Flask, request, jsonify
@@ -38,14 +38,24 @@ def search_news():
     data = TextRank.Get_sample_news(query_line, dictionary, tfidf_vectors)
     return jsonify(data)
 
-@app.route('/api/hot_topic', methods=['GET'])
-def hot_topic():
-    data = opinion_perception.get_hot_topic()
+@app.route('/api/update_hot_topic', methods=['POST'])
+def update_hot_topic():
+    opinion_perception.update_hot_topic()
+    # 因为上面函数的执行时间可能过长，nginx会返回502
+    data = {
+        'code': 200
+    }
     return jsonify(data)
 
-@app.route('/api/sentiment_classify', methods=['GET'])
-def sentiment_classify():
-    data = opinion_perception.news_sentiment_classify(opinion_perception.get_top_comments_news())
+@app.route('/api/hot_topic', methods=['GET'])
+def hot_topic():
+    data = opinion_perception.get_classified_hot_topic()
+    return jsonify(data)
+
+@app.route('/api/news_comment', methods=['GET'])
+def news_comment():
+    newsid = request.args.get('newsid')
+    data = opinion_perception.get_news_comment(newsid)
     return jsonify(data)
 
 if __name__ == '__main__':
